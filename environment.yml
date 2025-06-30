@@ -1,0 +1,58 @@
+name: fh4
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+
+dependencies:
+  # ─── Core & GPU support ───────────────────────────────
+  - python=3.10
+  - cudatoolkit=11.8
+
+  # ─── Deep Learning & RL ───────────────────────────────
+  - pytorch=2.2.2
+  - torchvision=0.17.2
+  - torchaudio=2.2.2
+  - gymnasium=0.29.1
+  - stable-baselines3=2.3.0
+  - sb3-contrib=2.3.0
+
+  # ─── Vision & Data ────────────────────────────────────
+  - numpy=1.26
+  - opencv          # from conda-forge
+  - pillow=10.2
+  - pandas=2.2
+  - scikit-image=0.22.0
+
+  # ─── Utilities & Logging ──────────────────────────────
+  - matplotlib=3.8
+  - tensorboard=2.16.2
+  - hydra-core=1.3.2
+  - wandb
+  - psutil=5.9.8
+
+  # ─── Build & Parallelism ──────────────────────────────
+  - cmake
+  - mpi4py
+  - joblib
+
+  # ─── Extras (optional OCR, gamepad) ───────────────────
+  - easyocr         # on-screen text parsing
+  - shapely=2.0.3
+  - imageio=2.34.0
+
+  # ─── pip installs for screen/input/other wheels ───────
+  - pip
+  - pip:
+    - mss==6.1.0              # cross-platform screen cap
+    - dxcam==0.0.5            # ultra-low-latency Windows capture
+    - pyautogui==0.9.54       # keyboard/mouse emulation
+    - pynput==1.7.6           # alternate input
+    - keyboard==0.13.5        # low-level key hooks
+    - vgamepad==0.1.0         # virtual Xbox pad for analog control
+    - python-bidi==0.4.2      # OCR support (easyocr dependency)
+    - pyclipper==1.3.0.post5  # OCR support
+    - ninja==1.11.1.4         # build helper (some wheels)
+    - fsspec>=2025.5.1        # file-system utils
+    - tifffile==2024.2.12     # advanced image I/O
+    - packaging==24.0         # version parsing, used widely
