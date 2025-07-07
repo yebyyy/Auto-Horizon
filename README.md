@@ -1,2 +1,2 @@
 # Auto-Horizon
-A self driving Forza Horizon 4 gaming agent
+A self-driving Forza Horizon 4 agent
