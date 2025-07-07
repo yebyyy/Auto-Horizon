@@ -3,7 +3,7 @@ from gymnasium.spaces import Box  # Box is used for continuous action and observ
 import numpy as np
 import time
 
-from scripts.capture import get_frame_stack
+from scripts.capture import get_frame_stack, GRAY
 from envs.actions import do_action
 
 class FH4Env(gym.Env):
@@ -20,7 +20,7 @@ class FH4Env(gym.Env):
         self.observation_space = Box(
             low = 0.0,
             high = 1.0,
-            shape = (4, 84, 84),  # 4 frames of size 84x84
+            shape = (4, 1, 84, 84) if GRAY else (4, 3, 84, 84),  # 4 frames of size 84x84
             dtype= np.float32
         )
         self.action_space = Box(

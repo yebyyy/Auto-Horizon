@@ -31,14 +31,16 @@ REGION = _window_rect(hwnd)
 # 3) Start background capture thread at 30 Hz
 camera.start(target_fps=30, region=REGION)
 
+GRAY = False  # True for grayscale, False for RGB
+
 # ─── Frame stack buffer ──────────────────────────────────
 _stack = deque(
-    [torch.zeros(1, FRAME_SIZE[1], FRAME_SIZE[0])] * STACK_SIZE,
+    [torch.zeros(1 if GRAY else 3, FRAME_SIZE[1], FRAME_SIZE[0])] * STACK_SIZE,
     maxlen=STACK_SIZE
 )
 
 # ─── Helper functions ───────────────────────────────────
-def get_frame(gray: bool = True) -> torch.Tensor:
+def get_frame(gray=GRAY) -> torch.Tensor:
     """Grab, preprocess, return tensor in [0,1], shape [C,H,W]."""
     img = camera.get_latest_frame()        # numpy H×W×3 RGB
     if img is None:                        # very first call can be None
@@ -48,7 +50,7 @@ def get_frame(gray: bool = True) -> torch.Tensor:
     if gray:
         img = cv2.cvtColor(img, cv2.COLOR_BGRA2GRAY)   # H×W
     else:
-        img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)    # H×W×3
+        img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)    # H×W×3
 
     img = cv2.resize(img, FRAME_SIZE, interpolation=cv2.INTER_AREA)
     tensor = torch.from_numpy(img).float().div(255.0)
@@ -59,15 +61,17 @@ def get_frame(gray: bool = True) -> torch.Tensor:
         return tensor.permute(2, 0, 1)    # [3,H,W]
 
 def get_frame_stack() -> torch.Tensor:
-    f = get_frame(gray=True)
+    f = get_frame(gray=GRAY)
     _stack.append(f)
-    return torch.cat(list(_stack), dim=0)  # [4,H,W]
+    return torch.stack(list(_stack), dim=0)  # [STACK_SIZE,C,H,W]
 
 # ─── Smoke-test ──────────────────────────────────────────
 if __name__ == "__main__":
     print("Press Q in the preview window to quit.")
     while True:
         latest = (get_frame_stack()[-1].numpy() * 255).astype(np.uint8)
+        if not GRAY:
+            latest = np.transpose(latest, (1, 2, 0))  # H×W×C for cv2.imshow
         cv2.imshow("FH4 Capture", latest)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
