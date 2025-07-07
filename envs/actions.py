@@ -20,7 +20,7 @@ def do_action(vec):
 
 
 if __name__ == "__main__":
-    import time, itertools
+    import time
     print("Virtual pad test: steer left→right. Ctrl-C to quit.")
     try:
         while True:
