@@ -9,21 +9,21 @@ FH4DemoDataset is the PyTorch Dataset wrapping those arrays and supporting an op
 
 from __future__ import annotations
 
-import os
+import os, glob
 from typing import List, Tuple
-from scripts.capture import GRAY
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+GRAY = False
 STACK_SIZE: int = 4                 # S
 CHANNELS: int   = 1 if GRAY else 3  # C (RGB)
 RESOLUTION: int = 84                # H, W
 
-def load_demos(files: List[str] | str) -> Tuple[np.ndarray, np.ndarray]:
+def load_demos(files: List[str] | str) -> Tuple[np.ndarray, np.ndarray, List[int]]:
     # files is a list of file names
     if isinstance(files, str):
-        files = ["./demos/" + files] if not files.startswith("./demos/") else [files]
+        files = sorted(glob.glob(files))  # glob is used to match patterns like "data/demos/*.npz"
         if not files:
             raise FileNotFoundError(f"No files match pattern: {files}")
 

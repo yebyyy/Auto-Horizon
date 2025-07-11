@@ -31,7 +31,9 @@ parser.add_argument("--test_run", type=int, default=8, help="Run ID for test set
 parser.add_argument("--epochs", type=int, default=8, help="Number of training epochs")
 parser.add_argument("--batch", type=int, default=128, help="Batch size")
 parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
+parser.add_argument("--loader_workers", type=int, default=0, help="Number of DataLoader workers")
 args = parser.parse_args()
+print(torch.cuda.is_available())
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -49,10 +51,11 @@ idx_val = run_indices(args.val_run)
 idx_test = run_indices(args.test_run)
 idx_train = [i for i in range(len(obs)) if i not in idx_val and i not in idx_test]
 
-train_ds = FH4DemoDataset(obs=obs[idx_train], act=act[idx_train])
-val_ds = FH4DemoDataset(obs=obs[idx_val], act=act[idx_val])
-train_loader = DataLoader(train_ds, batch_size=args.batch, shuffle=True, num_workers=4, pin_memory=True)  # num_workers uses 4 cpu cores
-val_loader = DataLoader(val_ds, batch_size=args.batch, shuffle=False, num_workers=4, pin_memory=True)  # pin_memory=True speeds up data transfer to GPU
+train_ds = FH4DemoDataset(obs, act, idx_train)
+val_ds = FH4DemoDataset(obs, act, idx_val)
+train_loader = DataLoader(train_ds, batch_size=args.batch, shuffle=True, num_workers=args.loader_workers, pin_memory=True)  # num_workers uses 4 cpu cores
+# no shuffling for validation set since we want to evaluate on the same data order
+val_loader = DataLoader(val_ds, batch_size=args.batch, shuffle=False, num_workers=args.loader_workers, pin_memory=True)  # pin_memory=True speeds up data transfer to GPU
 
 B, S, C, H, W = obs.shape
 print(f"Datset shapes: obs {obs.shape}, act {act.shape}, run_lens {run_lens}")
@@ -67,7 +70,7 @@ class ConvPolicy(nn.Module):
         # self.net is for observation input
         # (S,C,H,W) -> (batch, features)
         self.net = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels, out_channels=32, stride=4),  # downsample
+            nn.Conv2d(in_channels=in_channels, out_channels=32, kernel_size=8, stride=4),  # downsample
             nn.ReLU(inplace=True),  # inplace for memory efficiency
             nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
             nn.ReLU(inplace=True),
@@ -93,11 +96,11 @@ class ConvPolicy(nn.Module):
         b, s, c, h, w = x.shape
         x = x.view(b, s * c, h, w)  # reshape because Conv2d expects (batch, channels, height, width)
         out = self.head(self.net(x))  # (B, 3)
-        steer = out[:, 0]
-        gas = (out[:, 1] + 1) / 2  # scale to [0, 1]
-        brake = (out[:, 2] + 1) / 2
-        return torch.stack([steer, gas, brake], dim=1)
-    
+        steer = out[:, 0:1]
+        gas = (out[:, 1:2] + 1) / 2  # scale to [0, 1]
+        brake = (out[:, 2:3] + 1) / 2
+        return torch.cat([steer, gas, brake], dim=1)
+
 # Initialize model, loss, optimizer
 model = ConvPolicy().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
@@ -147,8 +150,8 @@ for epoch in range(1, args.epochs + 1):
 
     if val_loss < best_val:
         best_val = val_loss
-        torch.save(model.state_dict(), os.path.join(ckpt_dir, "bc_policy.pt"))
-        print(f"New best validation loss {val_loss:.4f}, saved to {ckpt_dir}/bc_policy.pt")
+        torch.save(model.state_dict(), os.path.join(ckpt_dir, f"bc_e{epoch}_val{val_loss:.3f}.pt"))
+        print(f"New best validation loss {val_loss:.4f}, saved to {ckpt_dir}/bc_e{epoch}_val{val_loss:.3f}.pt")
 
 print(f"Training complete. Best validation loss: {best_val:.4f}")
 writer.close()
