@@ -23,50 +23,34 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from data.dataset import load_demos, FH4DemoDataset
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--train_pattern", default="data/demos/*.npz",
-                    help="Glob pattern for training demo files")
-parser.add_argument("--val_run", type=int, default=7, help="Run ID for validation set, 1-indexed")
-parser.add_argument("--test_run", type=int, default=8, help="Run ID for test set, 1-indexed")
-parser.add_argument("--epochs", type=int, default=8, help="Number of training epochs")
-parser.add_argument("--batch", type=int, default=128, help="Batch size")
-parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
-parser.add_argument("--loader_workers", type=int, default=0, help="Number of DataLoader workers")
-args = parser.parse_args()
-print(torch.cuda.is_available())
+def build_loaders(pattern, val_run, test_run, batch, workers):
+    # Load training data
+    obs, act, run_lens = load_demos(pattern)
+    offsets = [0]
+    for l in run_lens:
+        offsets.append(offsets[-1] + l)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
+    def run_indices(run_id):
+        return list(range(offsets[run_id-1], offsets[run_id]))
 
-# Load training data
-obs, act, run_lens = load_demos(args.train_pattern)
-offsets = [0]
-for l in run_lens:
-    offsets.append(offsets[-1] + l)
+    idx_val = run_indices(val_run)
+    idx_test = run_indices(test_run)
+    idx_train = [i for i in range(len(obs)) if i not in idx_val and i not in idx_test]
 
-def run_indices(run_id):
-    return list(range(offsets[run_id-1], offsets[run_id]))
+    train_ds = FH4DemoDataset(obs, act, idx_train)
+    val_ds = FH4DemoDataset(obs, act, idx_val)
 
-idx_val = run_indices(args.val_run)
-idx_test = run_indices(args.test_run)
-idx_train = [i for i in range(len(obs)) if i not in idx_val and i not in idx_test]
+    train_loader = DataLoader(train_ds, batch_size=batch, shuffle=True, num_workers=workers, pin_memory=True)
+    val_loader = DataLoader(val_ds, batch_size=batch, shuffle=False, num_workers=workers, pin_memory=True)
 
-train_ds = FH4DemoDataset(obs, act, idx_train)
-val_ds = FH4DemoDataset(obs, act, idx_val)
-train_loader = DataLoader(train_ds, batch_size=args.batch, shuffle=True, num_workers=args.loader_workers, pin_memory=True)  # num_workers uses 4 cpu cores
-# no shuffling for validation set since we want to evaluate on the same data order
-val_loader = DataLoader(val_ds, batch_size=args.batch, shuffle=False, num_workers=args.loader_workers, pin_memory=True)  # pin_memory=True speeds up data transfer to GPU
-
-B, S, C, H, W = obs.shape
-print(f"Datset shapes: obs {obs.shape}, act {act.shape}, run_lens {run_lens}")
-print(f"Split: train {len(train_ds)}, val {len(val_ds)}, test {len(idx_test)}")
-
+    print(f"Loaded {len(obs)} frames: train {len(train_ds)} | val {len(val_ds)} | test {len(idx_test)}")
+    return train_loader, val_loader, train_ds, val_ds, obs.shape
 
 class ConvPolicy(nn.Module):
     """Simple CNN policy for FH4 Behavioral Cloning."""
-    def __init__(self):
+    def __init__(self, in_shape):
         super().__init__()
-        in_channels = S * C
+        in_channels = in_shape[1] * in_shape[2]
         # self.net is for observation input
         # (S,C,H,W) -> (batch, features)
         self.net = nn.Sequential(
@@ -80,7 +64,7 @@ class ConvPolicy(nn.Module):
         )
 
         with torch.no_grad():
-            dummy = torch.zeros(1, in_channels, H, W)
+            dummy = torch.zeros(1, in_channels, in_shape[3], in_shape[4])
             flat_dim = self.net(dummy).shape[1]
         
         # self.head is for action output
@@ -100,59 +84,80 @@ class ConvPolicy(nn.Module):
         gas = (out[:, 1:2] + 1) / 2  # scale to [0, 1]
         brake = (out[:, 2:3] + 1) / 2
         return torch.cat([steer, gas, brake], dim=1)
+    
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--train_pattern", default="data/demos/*.npz",
+                    help="Glob pattern for training demo files")
+    parser.add_argument("--val_run", type=int, default=7, help="Run ID for validation set, 1-indexed")
+    parser.add_argument("--test_run", type=int, default=8, help="Run ID for test set, 1-indexed")
+    parser.add_argument("--epochs", type=int, default=8, help="Number of training epochs")
+    parser.add_argument("--batch", type=int, default=128, help="Batch size")
+    parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
+    parser.add_argument("--loader_workers", type=int, default=0, help="Number of DataLoader workers")
+    args = parser.parse_args()
+    print(torch.cuda.is_available())
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
-# Initialize model, loss, optimizer
-model = ConvPolicy().to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
-criterion = nn.SmoothL1Loss()
+    train_ld, val_ld, train_ds, val_ds, in_shape = build_loaders(
+        args.train_pattern, args.val_run, args.test_run, args.batch, args.loader_workers
+    )
 
-log_dir = os.path.join("runs", datetime.datetime.now().strftime("%y%m%d-%H%M%S"))
-os.makedirs(log_dir, exist_ok=True)
-writer = SummaryWriter(log_dir=log_dir)
-ckpt_dir = "checkpoints"
-os.makedirs(ckpt_dir, exist_ok=True)
-best_val = float("inf")
+    model = ConvPolicy(in_shape).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
+    criterion = nn.SmoothL1Loss()
+    log_dir = os.path.join("runs", datetime.datetime.now().strftime("%y%m%d-%H%M%S"))
+    os.makedirs(log_dir, exist_ok=True)
+    writer = SummaryWriter(log_dir=log_dir)
+    ckpt_dir = "checkpoints"
+    os.makedirs(ckpt_dir, exist_ok=True)
+    best_val = float("inf")
 
-# Training loop
-for epoch in range(1, args.epochs + 1):
-    model.train()  # set model to training mode
-    running_loss = 0.0
-    for obs_batch, act_batch in train_loader:
-        obs_batch = obs_batch.to(device)
-        act_batch = act_batch.to(device)
-        pred = model(obs_batch)
-        loss = criterion(pred, act_batch)
-        
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        running_loss += loss.item() * len(obs_batch)
-    train_loss = running_loss / len(train_ds)
-    # running loss is accumulated over the entire epoch
-    # training loss is averaged over the dataset size
-
-    # validation loop
-    model.eval()
-    running_loss = 0.0
-    with torch.no_grad():
-        for obs_batch, act_batch in val_loader:
+    # Training loop
+    for epoch in range(1, args.epochs + 1):
+        model.train()  # set model to training mode
+        running_loss = 0.0
+        for obs_batch, act_batch in train_ld:
             obs_batch = obs_batch.to(device)
             act_batch = act_batch.to(device)
             pred = model(obs_batch)
             loss = criterion(pred, act_batch)
+            
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
             running_loss += loss.item() * len(obs_batch)
-    val_loss = running_loss / len(val_ds)
+        train_loss = running_loss / len(train_ds)
+        # running loss is accumulated over the entire epoch
+        # training loss is averaged over the dataset size
 
-    # write to TensorBoard
-    writer.add_scalar("loss/train", train_loss, epoch)
-    writer.add_scalar("loss/val", val_loss, epoch)
-    print(f"epoch {epoch: 02d} | train loss {train_loss:.4f} | val loss {val_loss:.4f}")
+        # validation loop
+        model.eval()
+        running_loss = 0.0
+        with torch.no_grad():
+            for obs_batch, act_batch in val_ld:
+                obs_batch = obs_batch.to(device)
+                act_batch = act_batch.to(device)
+                pred = model(obs_batch)
+                loss = criterion(pred, act_batch)
+                running_loss += loss.item() * len(obs_batch)
+        val_loss = running_loss / len(val_ds)
 
-    if val_loss < best_val:
-        best_val = val_loss
-        torch.save(model.state_dict(), os.path.join(ckpt_dir, f"bc_e{epoch}_val{val_loss:.3f}.pt"))
-        print(f"New best validation loss {val_loss:.4f}, saved to {ckpt_dir}/bc_e{epoch}_val{val_loss:.3f}.pt")
+        # write to TensorBoard
+        writer.add_scalar("loss/train", train_loss, epoch)
+        writer.add_scalar("loss/val", val_loss, epoch)
+        print(f"epoch {epoch: 02d} | train loss {train_loss:.4f} | val loss {val_loss:.4f}")
 
-print(f"Training complete. Best validation loss: {best_val:.4f}")
-writer.close()
-print(f"TensorBoard logs saved to {log_dir}")
+        if val_loss < best_val:
+            best_val = val_loss
+            torch.save(model.state_dict(), os.path.join(ckpt_dir, f"bc_e{epoch}_val{val_loss:.3f}.pt"))
+            print(f"New best validation loss {val_loss:.4f}, saved to {ckpt_dir}/bc_e{epoch}_val{val_loss:.3f}.pt")
+
+    print(f"Training complete. Best validation loss: {best_val:.4f}")
+    writer.close()
+    print(f"TensorBoard logs saved to {log_dir}")
+
+
+if __name__ == "__main__":
+    main()
