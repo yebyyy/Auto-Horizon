@@ -27,11 +27,12 @@ def load_demos(files: List[str] | str) -> Tuple[np.ndarray, np.ndarray]:
         if not files:
             raise FileNotFoundError(f"No files match pattern: {files}")
 
-    obs_list, act_list = [], []
+    obs_list, act_list, run_lengths = [], [], []
     for f in files:
         data = np.load(f)
         obs_list.append(data["obs"].astype(np.float32))
         act_list.append(data["act"].astype(np.float32))
+        run_lengths.append(len(data["obs"]))
 
     obs = np.concatenate(obs_list, axis=0)
     act = np.concatenate(act_list, axis=0)
@@ -40,7 +41,7 @@ def load_demos(files: List[str] | str) -> Tuple[np.ndarray, np.ndarray]:
     S, C, H, W = obs.shape[1:]
     assert S == STACK_SIZE and C == CHANNELS and H == RESOLUTION and W == RESOLUTION, f"Mismatch: expected ({STACK_SIZE},{CHANNELS},{RESOLUTION},{RESOLUTION}), got ({S},{C},{H},{W})"
 
-    return obs, act
+    return obs, act, run_lengths
 
 class FH4DemoDataset(Dataset):
 
