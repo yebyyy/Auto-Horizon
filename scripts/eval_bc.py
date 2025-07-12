@@ -18,7 +18,7 @@ def main():
     parser.add_argument("--demo", default="data/demos/*.npz",
                         help="Glob pattern for demo files")
     parser.add_argument("--run_id", type=int, default=8, help="Run ID for eval, 1-indexed")
-    parser.add_argument("--ckpt", default="checkpoints/bc_e9_val0.025.pt")
+    parser.add_argument("--ckpt", default="checkpoints/bc_e5_val0.024.pt")
     parser.add_argument("--csv",  default="eval_metrics.csv",
                     help="where to append results")
     args = parser.parse_args()

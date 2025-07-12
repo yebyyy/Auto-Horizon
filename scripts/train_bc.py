@@ -71,7 +71,9 @@ class ConvPolicy(nn.Module):
         self.head = nn.Sequential(
             nn.Linear(flat_dim, 512),  # flat_dim because of Conv2d output
             nn.ReLU(inplace=True),
-            nn.Linear(512, 3), # output 3 actions: steer, gas, brake
+            nn.Linear(512, 512),
+            nn.ReLU(inplace=True),
+            nn.Linear(512, 3),  # steer, gas, brake
             nn.Tanh()  # output range [-1, 1]
         )
 
