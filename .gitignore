@@ -5,3 +5,4 @@ runs/
 checkpoints/
 eval_metrics.csv
 policies/__pycache__/
+envs/__pycache__/
