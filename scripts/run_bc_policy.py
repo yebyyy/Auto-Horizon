@@ -23,13 +23,14 @@ from envs.actions import do_action
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ckpt", default="checkpoints/bc_e2_val0.026.pt", help="Path to the trained BC model checkpoint.")
+    parser.add_argument("--ckpt", default="checkpoints/bc_e14_val0.032.pt", help="Path to the trained BC model checkpoint.")
     parser.add_argument("--fps", type=int, default=30, help="Frames per second for the policy.")
     parser.add_argument("--device", default="cuda", help="cuda | cpu")
+    parser.add_argument("--model", choices=["conv", "resnet"], default="conv", help="Model architecture: conv | resnet")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() and args.device == "cuda" else "cpu"
-    policy = BCPolicy(args.ckpt, device=device)
+    policy = BCPolicy(args.ckpt, device=device, model=args.model)
     period = 1.0 / args.fps
 
     print(f"BC rollout running at {args.fps} FPS on {device}. Press 'esc' to exit.")

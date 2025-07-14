@@ -5,16 +5,20 @@ actions given a stacked observation [S,C,H,W] (or batched).
 
 from __future__ import annotations
 import torch
-from scripts.train_bc import ConvPolicy
+from scripts.train_bc import ConvPolicy, ResNetPolicy
 
 class BCPolicy:
     
     def __init__(self, 
                  ckpt_path: str,
                  in_shape: tuple[int, int, int, int, int] = (1, 4, 3, 84, 84),
+                 model: str = "conv",
                  device: str | torch.device = "cuda"):
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
-        self.net = ConvPolicy(in_shape=in_shape).to(self.device)
+        if model == "conv":
+            self.net = ConvPolicy(in_shape=in_shape).to(self.device)
+        else:
+            self.net = ResNetPolicy(in_shape=in_shape).to(self.device)
         self.net.load_state_dict(torch.load(ckpt_path, map_location=self.device))
         self.net.eval()
 

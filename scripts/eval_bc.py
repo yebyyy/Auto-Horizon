@@ -10,7 +10,7 @@ $ python scripts/eval_bc.py \
 
 import argparse, glob, numpy as np, torch, torch.nn as nn, datetime
 from data.dataset import load_demos
-from scripts.train_bc import ConvPolicy
+from scripts.train_bc import ConvPolicy, ResNetPolicy
 import csv, pathlib
 
 def main():
@@ -18,7 +18,9 @@ def main():
     parser.add_argument("--demo", default="data/demos/*.npz",
                         help="Glob pattern for demo files")
     parser.add_argument("--run_id", type=int, default=8, help="Run ID for eval, 1-indexed")
-    parser.add_argument("--ckpt", default="checkpoints/bc_e2_val0.026.pt")
+    parser.add_argument("--ckpt", default="checkpoints/bc_e14_val0.032.pt")
+    parser.add_argument("--model", choices=["conv", "resnet"], default="conv",
+                        help="Model architecture: conv | resnet")
     parser.add_argument("--csv",  default="eval_metrics.csv",
                     help="where to append results")
     args = parser.parse_args()
@@ -38,7 +40,10 @@ def main():
     print(f"using {end-start} frames from run {args.run_id} for evaluation")
 
     # load model
-    model = ConvPolicy(obs_test.shape).to(device)
+    if args.model == "resnet":
+        model = ResNetPolicy(obs_test.shape).to(device)
+    else:
+        model = ConvPolicy(obs_test.shape).to(device)
     model.load_state_dict(torch.load(args.ckpt, map_location=device))
     model.eval()  # set to eval mode
 

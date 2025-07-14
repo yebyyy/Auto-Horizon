@@ -19,6 +19,7 @@ $ python scripts/train_bc.py \
 import os, argparse, time, datetime
 import numpy as np
 import torch, torch.nn as nn
+from torchvision import models  # ResNet, VGG, etc.
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from data.dataset import load_demos, FH4DemoDataset
@@ -93,6 +94,35 @@ class ConvPolicy(nn.Module):
         brake = (out[:, 2:3] + 1) / 2
         return torch.cat([steer, gas, brake], dim=1)
     
+class ResNetPolicy(nn.Module):
+    """ResNet-based policy"""
+    def __init__(self, in_shape=(1, 4, 3, 84, 84), freeze_up_to=6):
+        super().__init__()
+        in_channels = in_shape[1] * in_shape[2]
+        backbone = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+        backbone.conv1 = nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        layers = list(backbone.children())
+        for l in layers[:freeze_up_to]:
+            for p in l.parameters():
+                p.requires_grad_(False)
+
+        self.backbone = nn.Sequential(*layers[:-1])  # remove the final fc layer (nn.Linear(512, num_classes))
+        self.head = nn.Sequential(
+            nn.Linear(512, 256), nn.ReLU(inplace=True),
+            nn.Linear(256, 3), nn.Tanh()  # steer, gas, brake
+        )
+
+    def forward(self, x):
+        b, s, c, h, w = x.shape
+        x = x.view(b, s * c, h, w)  # reshape to (batch, channels, height, width)
+        feats = self.backbone(x).flatten(1)
+        out = self.head(feats)  # (B, 3)
+        steer = out[:, 0:1]
+        gas = (out[:, 1:2] + 1) / 2  # scale to [0, 1]
+        brake = (out[:, 2:3] + 1) / 2
+        return torch.cat([steer, gas, brake], dim=1)
+
+    
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train_pattern", default="data/demos/*.npz",
@@ -103,6 +133,8 @@ def main():
     parser.add_argument("--batch", type=int, default=128, help="Batch size")
     parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
     parser.add_argument("--loader_workers", type=int, default=0, help="Number of DataLoader workers")
+    parser.add_argument("--model", choices=["conv", "resnet"], default="conv",
+                        help="Model architecture: conv | resnet")
     args = parser.parse_args()
     print(torch.cuda.is_available())
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -112,7 +144,10 @@ def main():
         args.train_pattern, args.val_run, args.test_run, args.batch, args.loader_workers
     )
 
-    model = ConvPolicy(in_shape).to(device)
+    if args.model == "conv":
+        model = ConvPolicy(in_shape).to(device)
+    else:
+        model = ResNetPolicy(in_shape).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
     criterion = nn.SmoothL1Loss()
     log_dir = os.path.join("runs", datetime.datetime.now().strftime("%y%m%d-%H%M%S"))
