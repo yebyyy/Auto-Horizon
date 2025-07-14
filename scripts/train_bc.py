@@ -54,11 +54,17 @@ class ConvPolicy(nn.Module):
         # self.net is for observation input
         # (S,C,H,W) -> (batch, features)
         self.net = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels, out_channels=32, kernel_size=8, stride=4),  # downsample
+            nn.Conv2d(in_channels=in_channels, out_channels=64, kernel_size=8, stride=4),  # downsample
+            nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),  # inplace for memory efficiency
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2),
+            nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1),
+            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1),
+            nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
             nn.Flatten(),  # flatten to (batch, features)
         )

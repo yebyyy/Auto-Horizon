@@ -23,7 +23,7 @@ from envs.actions import do_action
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ckpt", default="checkpoints/bc_e5_val0.025.pt", help="Path to the trained BC model checkpoint.")
+    parser.add_argument("--ckpt", default="checkpoints/bc_e2_val0.026.pt", help="Path to the trained BC model checkpoint.")
     parser.add_argument("--fps", type=int, default=30, help="Frames per second for the policy.")
     parser.add_argument("--device", default="cuda", help="cuda | cpu")
     args = parser.parse_args()
