@@ -1,7 +1,7 @@
 import vgamepad as vg
 import numpy as np
 
-_PAD = vg.VX360Gamepad()
+_PAD = vg.VX360Gamepad()  # create a virtual gamepad instance
 
 def do_action(vec):
     """

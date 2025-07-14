@@ -43,18 +43,21 @@ def main():
             break
         time.sleep(0.05) # wait for space to be pressed
 
+    action_id = 0
     try: 
         while not kb.is_pressed("esc"):
             tic = time.perf_counter()
             obs_stack = torch.from_numpy(get_frame_stack().numpy()).float()  # [S,C,H,W]
-            action = policy.predict(obs_stack).numpy()  # [S,A]
+            action = policy.predict(obs_stack).numpy().tolist()  # [S,A]
             do_action(action)
-
+            action_id += 1
+            print(f"Action ID: {action_id}, Action: {action}")
             df = time.perf_counter() - tic
             if df < period:
                 time.sleep(period - df)
     finally:
-        do_action(np.ndarray([0.0, 0.0, 0.0]), dtype=np.float32)  # release everything
+        print(f"Final action ID: {action_id}")
+        do_action(([0.0, 0.0, 0.0]))  # release everything
         print("Released virtual pad. Exiting BC rollout.")
 
 if __name__ == "__main__":
