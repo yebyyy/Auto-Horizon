@@ -112,9 +112,13 @@ class ResNetPolicy(nn.Module):
             nn.Linear(256, 3), nn.Tanh()  # steer, gas, brake
         )
 
+        self.register_buffer("image_net_mean", torch.tensor([0.485, 0.456, 0.406]).repeat(4)[None, :, None, None])
+        self.register_buffer("image_net_std", torch.tensor([0.229, 0.224, 0.225]).repeat(4)[None, :, None, None])
+
     def forward(self, x):
         b, s, c, h, w = x.shape
         x = x.view(b, s * c, h, w)  # reshape to (batch, channels, height, width)
+        x = (x - self.image_net_mean) / self.image_net_std  # normalize to ImageNet stats
         feats = self.backbone(x).flatten(1)
         out = self.head(feats)  # (B, 3)
         steer = out[:, 0:1]
@@ -149,7 +153,6 @@ def main():
     else:
         model = ResNetPolicy(in_shape).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
-    criterion = nn.SmoothL1Loss()
     log_dir = os.path.join("runs", datetime.datetime.now().strftime("%y%m%d-%H%M%S"))
     os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
@@ -161,11 +164,13 @@ def main():
     for epoch in range(1, args.epochs + 1):
         model.train()  # set model to training mode
         running_loss = 0.0
+        weight = torch.tensor([3., 1., 2.], device=device)  # weights for steer, gas, brake
         for obs_batch, act_batch in train_ld:
             obs_batch = obs_batch.to(device)
             act_batch = act_batch.to(device)
             pred = model(obs_batch)
-            loss = criterion(pred, act_batch)
+            per_element_loss = nn.functional.smooth_l1_loss(pred, act_batch, reduction="none")
+            loss = (per_element_loss * weight).mean()  # weighted loss
             
             optimizer.zero_grad()
             loss.backward()
@@ -183,7 +188,8 @@ def main():
                 obs_batch = obs_batch.to(device)
                 act_batch = act_batch.to(device)
                 pred = model(obs_batch)
-                loss = criterion(pred, act_batch)
+                per_element_loss = nn.functional.smooth_l1_loss(pred, act_batch, reduction="none")
+                loss = (per_element_loss * weight).mean()
                 running_loss += loss.item() * len(obs_batch)
         val_loss = running_loss / len(val_ds)
 
