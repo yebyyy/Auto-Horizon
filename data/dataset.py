@@ -9,11 +9,11 @@ FH4DemoDataset is the PyTorch Dataset wrapping those arrays and supporting an op
 
 from __future__ import annotations
 
-import os, glob
+import os, glob, itertools
 from typing import List, Tuple
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Sampler
 
 GRAY = False
 STACK_SIZE: int = 4                 # S
@@ -60,3 +60,41 @@ class FH4DemoDataset(Dataset):
             torch.from_numpy(self.obs[i]),  # (S,C,H,W)
             torch.from_numpy(self.act[i])   # (3,)
         )
+    
+class BalancedBatchSampler(Sampler):
+    """
+    Yields indices so that every batch contains a 50-50 mix of
+    |steer| > 0.3 or brake > 0.4
+    and common straight gas frames.
+    """
+    def __init__(self, actions: np.ndarray, indices: List[int], batch_size: int, shuffle: bool = True):
+        super().__init__()
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+        steer_turn = np.abs(actions[:, 0]) > 0.3
+        heavy_brake = actions[:, 2] > 0.4
+        rare_mask = steer_turn | heavy_brake
+
+        self.rare = [k for k, idx in enumerate(indices) if rare_mask[idx]]
+        self.common = [k for k, idx in enumerate(indices) if not rare_mask[idx]]
+        self.num_batches = len(indices) // batch_size
+
+    def __iter__(self):
+        if self.shuffle:
+            np.random.shuffle(self.rare)
+            np.random.shuffle(self.common)
+        
+        # itertools.cycle is used to ensure we can always fill a batch
+        r_iter = itertools.cycle(self.rare)
+        c_iter = itertools.cycle(self.common)
+
+        half = self.batch_size // 2
+        for _ in range(self.num_batches):
+            batch = [next(r_iter) for _ in range(half)] + [next(c_iter) for _ in range(self.batch_size - half)]
+            if self.shuffle:
+                np.random.shuffle(batch)
+            yield batch  # yield means we can iterate over this sampler
+
+    def __len__(self):
+        return self.num_batches

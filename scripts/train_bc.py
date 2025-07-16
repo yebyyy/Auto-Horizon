@@ -22,7 +22,7 @@ import torch, torch.nn as nn
 from torchvision import models  # ResNet, VGG, etc.
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from data.dataset import load_demos, FH4DemoDataset
+from data.dataset import load_demos, FH4DemoDataset, BalancedBatchSampler
 
 def build_loaders(pattern, val_run, test_run, batch, workers):
     # Load training data
@@ -40,8 +40,9 @@ def build_loaders(pattern, val_run, test_run, batch, workers):
 
     train_ds = FH4DemoDataset(obs, act, idx_train)
     val_ds = FH4DemoDataset(obs, act, idx_val)
-
-    train_loader = DataLoader(train_ds, batch_size=batch, shuffle=True, num_workers=workers, pin_memory=True)
+    
+    train_sampler = BalancedBatchSampler(act, idx_train, batch_size=batch, shuffle=True)
+    train_loader = DataLoader(train_ds, batch_sampler=train_sampler, num_workers=workers, pin_memory=True)
     val_loader = DataLoader(val_ds, batch_size=batch, shuffle=False, num_workers=workers, pin_memory=True)
 
     print(f"Loaded {len(obs)} frames: train {len(train_ds)} | val {len(val_ds)} | test {len(idx_test)}")
@@ -108,8 +109,10 @@ class ResNetPolicy(nn.Module):
 
         self.backbone = nn.Sequential(*layers[:-1])  # remove the final fc layer (nn.Linear(512, num_classes))
         self.head = nn.Sequential(
+            nn.Linear(512, 512), nn.ReLU(inplace=True),
             nn.Linear(512, 256), nn.ReLU(inplace=True),
-            nn.Linear(256, 3), nn.Tanh()  # steer, gas, brake
+            nn.Linear(256, 128), nn.ReLU(inplace=True),
+            nn.Linear(128, 3), nn.Tanh()  # steer, gas, brake
         )
 
         self.register_buffer("image_net_mean", torch.tensor([0.485, 0.456, 0.406]).repeat(4)[None, :, None, None])
