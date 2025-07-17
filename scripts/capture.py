@@ -8,11 +8,11 @@ import time
 import win32gui
 
 # ─── CONFIGURE THIS ──────────────────────────────────────
-FRAME_SIZE = (84, 84)   # (W, H) for the network
+FRAME_SIZE = (224, 144)   # (W, H) for the network
 STACK_SIZE = 4
 
 # 1) Create a camera (no target_fps/region in v0.0.5)
-camera = dxcam.create()
+camera = dxcam.create(output_color="RGB")
 
 # 2) Locate the FH4 window & get its bounding box
 TARGET_TITLE = "Forza Horizon 4"          # exact window title
@@ -48,9 +48,9 @@ def get_frame(gray=GRAY) -> torch.Tensor:
         return get_frame(gray)
 
     if gray:
-        img = cv2.cvtColor(img, cv2.COLOR_BGRA2GRAY)   # H×W
-    else:
-        img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)    # H×W×3
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)   # H×W
+    # else:
+    #     img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)    # H×W×3
 
     img = cv2.resize(img, FRAME_SIZE, interpolation=cv2.INTER_AREA)
     tensor = torch.from_numpy(img).float().div(255.0)
@@ -67,6 +67,17 @@ def get_frame_stack() -> torch.Tensor:
 
 # ─── Smoke-test ──────────────────────────────────────────
 if __name__ == "__main__":
+    DUMP = 1
+    if DUMP == 1:
+        import imageio, itertools, os
+        os.makedirs("samples", exist_ok=True)
+        for i in itertools.count():
+            rgb_t = get_frame(gray=False)
+            image = (rgb_t.permute(1, 2, 0).numpy() * 255).astype(np.uint8)  # H×W×C
+            imageio.imwrite(f"samples/frame_{i:04d}.png", image)
+            if i == 1000: break  # save 100 frames
+        print("dumped frames to 'samples/'")
+        quit()
     print("Press Q in the preview window to quit.")
     while True:
         latest = (get_frame_stack()[-1].numpy() * 255).astype(np.uint8)
