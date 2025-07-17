@@ -10,6 +10,9 @@ import win32gui
 # ─── CONFIGURE THIS ──────────────────────────────────────
 FRAME_SIZE = (224, 144)   # (W, H) for the network
 STACK_SIZE = 4
+CYAN_LO  = ( 80,  40,  60);  CYAN_HI  = (105, 255, 255)   # blue / green
+RED1_LO = (105,  80,  60);  RED1_HI = (130, 255, 255)    # orange‑red
+RED2_LO = (  0,  80,  60);  RED2_HI = ( 15, 255, 255)   # red
 
 # 1) Create a camera (no target_fps/region in v0.0.5)
 camera = dxcam.create(output_color="RGB")
@@ -35,7 +38,7 @@ GRAY = False  # True for grayscale, False for RGB
 
 # ─── Frame stack buffer ──────────────────────────────────
 _stack = deque(
-    [torch.zeros(1 if GRAY else 3, FRAME_SIZE[1], FRAME_SIZE[0])] * STACK_SIZE,
+    [torch.zeros(1 if GRAY else 4, FRAME_SIZE[1], FRAME_SIZE[0])] * STACK_SIZE,
     maxlen=STACK_SIZE
 )
 
@@ -43,6 +46,8 @@ _stack = deque(
 def get_frame(gray=GRAY) -> torch.Tensor:
     """Grab, preprocess, return tensor in [0,1], shape [C,H,W]."""
     img = camera.get_latest_frame()        # numpy H×W×3 RGB
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+
     if img is None:                        # very first call can be None
         time.sleep(0.01)
         return get_frame(gray)
@@ -52,13 +57,16 @@ def get_frame(gray=GRAY) -> torch.Tensor:
     # else:
     #     img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)    # H×W×3
 
-    img = cv2.resize(img, FRAME_SIZE, interpolation=cv2.INTER_AREA)
+    mask = cv2.inRange(hsv, CYAN_LO, CYAN_HI) | cv2.inRange(hsv, RED1_LO, RED1_HI) | cv2.inRange(hsv, RED2_LO, RED2_HI)
+    mask = mask.astype(np.float32) / 255.0  # H×W mask in [0,1]
+    frame = np.dstack([img, mask])  # H×W×4
+    img = cv2.resize(frame, FRAME_SIZE, interpolation=cv2.INTER_AREA)
     tensor = torch.from_numpy(img).float().div(255.0)
 
     if gray:
         return tensor.unsqueeze(0)        # [1,H,W]
     else:
-        return tensor.permute(2, 0, 1)    # [3,H,W]
+        return tensor.permute(2, 0, 1)    # [4,H,W]
 
 def get_frame_stack() -> torch.Tensor:
     f = get_frame(gray=GRAY)

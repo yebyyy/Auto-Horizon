@@ -17,7 +17,7 @@ from torch.utils.data import Dataset, Sampler
 
 GRAY = False
 STACK_SIZE: int = 4                 # S
-CHANNELS: int   = 1 if GRAY else 3  # C (RGB)
+CHANNELS: int   = 1 if GRAY else 4  # C (RGB + mask)
 RESOLUTION: int = 84                # H, W
 
 def load_demos(files: List[str] | str) -> Tuple[np.ndarray, np.ndarray, List[int]]:
