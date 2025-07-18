@@ -11,7 +11,7 @@ import win32gui
 FRAME_SIZE = (224, 144)   # (W, H) for the network
 STACK_SIZE = 4
 CYAN_LO  = (105, 30, 70);  CYAN_HI  = (135, 160, 230)   # light blue / cyan
-YELLOW_LO = (11, 45, 70); YELLOW_HI = (35, 180, 230)   # yellow
+YELLOW_LO = (15, 45, 70); YELLOW_HI = (35, 180, 230)   # yellow
 RED1_LO = (0, 80, 70);  RED1_HI = (10, 200, 230)    # red
 RED2_LO = (165, 70, 70);  RED2_HI = (180, 200, 230)   # red
 
