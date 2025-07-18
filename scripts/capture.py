@@ -10,11 +10,10 @@ import win32gui
 # ─── CONFIGURE THIS ──────────────────────────────────────
 FRAME_SIZE = (224, 144)   # (W, H) for the network
 STACK_SIZE = 4
-CYAN_LO  = (114, 170, 60);  CYAN_HI  = (120, 220, 170)   # light blue / cyan
-YELLOW_LO = (90, 120, 70); YELLOW_HI = (105, 170, 170)   # yellow
-ORANGE_LO = (105, 130, 80); ORANGE_HI = (115, 200, 180)  # orange
-RED1_LO = (0, 65, 70);  RED1_HI = (15, 165, 140)    # red
-RED2_LO = (170, 30, 70);  RED2_HI = (180, 60, 100)   # red
+CYAN_LO  = (105, 30, 70);  CYAN_HI  = (135, 160, 230)   # light blue / cyan
+YELLOW_LO = (11, 45, 70); YELLOW_HI = (35, 180, 230)   # yellow
+RED1_LO = (0, 80, 70);  RED1_HI = (10, 200, 230)    # red
+RED2_LO = (165, 70, 70);  RED2_HI = (180, 200, 230)   # red
 
 # 1) Create a camera (no target_fps/region in v0.0.5)
 camera = dxcam.create(output_color="BGR")
@@ -60,7 +59,7 @@ def get_frame(gray=GRAY) -> torch.Tensor:
     # else:
     #     img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)    # H×W×3
 
-    mask = (cv2.inRange(hsv, CYAN_LO, CYAN_HI) | cv2.inRange(hsv, RED1_LO, RED1_HI) | cv2.inRange(hsv, RED2_LO, RED2_HI))
+    mask = (cv2.inRange(hsv, CYAN_LO, CYAN_HI) | cv2.inRange(hsv, YELLOW_LO, YELLOW_HI) | cv2.inRange(hsv, RED1_LO, RED1_HI) | cv2.inRange(hsv, RED2_LO, RED2_HI))
     mask = mask.astype(np.float32) / 255.0  # H×W, float in [0,1]
     img = img.astype(np.float32) / 255.0  # H×W or H×W×3, float in [0,1]
     frame = np.dstack([img, mask[..., np.newaxis]])

@@ -1,6 +1,6 @@
 import numpy as np, cv2, time, os, sys
 
-data  = np.load("data/demos/250717-233434.npz")
+data  = np.load("data/demos/250718-174839.npz")
 obs   = data["obs"]      # (N, S, C, H, W)
 acts  = data["act"]      # (N, 3)
 
@@ -39,7 +39,7 @@ for i in range(len(obs)):
          sys.exit(f"Unexpected C={C}; expected 3 or 4")
         
 
-    if cv2.waitKey(1) & 0xFF == ord("q"):
+    if cv2.waitKey(33) & 0xFF == ord("q"):
         break
     time.sleep(1/30)                    
     
